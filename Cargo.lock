@@ -548,6 +548,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "disk_scanner"
+version = "0.1.0"
+dependencies = [
+ "console_error_panic_hook",
+ "eframe",
+ "serde",
+ "tracing-wasm",
+]
+
+[[package]]
 name = "dispatch"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -594,16 +604,6 @@ dependencies = [
  "egui_glow",
  "egui_web",
  "epi",
-]
-
-[[package]]
-name = "eframe_template"
-version = "0.1.0"
-dependencies = [
- "console_error_panic_hook",
- "eframe",
- "serde",
- "tracing-wasm",
 ]
 
 [[package]]
