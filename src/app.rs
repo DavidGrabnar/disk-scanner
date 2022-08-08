@@ -1,23 +1,50 @@
+use crate::app::utils::Bytes;
+use eframe::egui::{CollapsingHeader, Ui};
 use eframe::{egui, epi};
+use sysinfo::{DiskExt, System, SystemExt};
+
+mod tree;
+mod utils;
+
+#[derive(PartialEq)]
+pub enum SidePanelView {
+    None,
+    Sources,
+    Profile,
+    Settings,
+}
 
 /// We derive Deserialize/Serialize so we can persist app state on shutdown.
 #[cfg_attr(feature = "persistence", derive(serde::Deserialize, serde::Serialize))]
 #[cfg_attr(feature = "persistence", serde(default))] // if we add new fields, give them default values when deserializing old state
 pub struct DiskScanner {
-    // Example stuff:
-    label: String,
-
-    // this how you opt-out of serialization of a member
     #[cfg_attr(feature = "persistence", serde(skip))]
-    value: f32,
+    side_panel_view: SidePanelView,
+
+    #[cfg_attr(feature = "persistence", serde(skip))]
+    system: System,
 }
 
 impl Default for DiskScanner {
     fn default() -> Self {
         Self {
-            // Example stuff:
-            label: "Hello World!".to_owned(),
-            value: 2.7,
+            side_panel_view: SidePanelView::None,
+            system: System::new_all(), // TODO only disk and disk list ?
+        }
+    }
+}
+
+impl DiskScanner {
+    fn menu_toggle_button(&mut self, ui: &mut Ui, view: SidePanelView, text: &str) {
+        if ui
+            .selectable_label(self.side_panel_view == view, text)
+            .clicked()
+        {
+            if self.side_panel_view != view {
+                self.side_panel_view = view;
+            } else {
+                self.side_panel_view = SidePanelView::None;
+            }
         }
     }
 }
@@ -40,6 +67,13 @@ impl epi::App for DiskScanner {
         if let Some(storage) = _storage {
             *self = epi::get_value(storage, epi::APP_KEY).unwrap_or_default()
         }
+
+        self.system.refresh_all();
+
+        println!("=> disks:");
+        for disk in self.system.disks() {
+            println!("{:?}", disk);
+        }
     }
 
     /// Called by the frame work to save state before shutdown.
@@ -52,8 +86,6 @@ impl epi::App for DiskScanner {
     /// Called each time the UI needs repainting, which may be many times per second.
     /// Put your widgets into a `SidePanel`, `TopPanel`, `CentralPanel`, `Window` or `Area`.
     fn update(&mut self, ctx: &egui::Context, frame: &epi::Frame) {
-        let Self { label, value } = self;
-
         // Examples of how to create different panels and windows.
         // Pick whichever suits you.
         // Tip: a good default choice is to just keep the `CentralPanel`.
@@ -67,42 +99,78 @@ impl epi::App for DiskScanner {
                         frame.quit();
                     }
                 });
+
+                self.menu_toggle_button(ui, SidePanelView::Sources, "Sources");
+                self.menu_toggle_button(ui, SidePanelView::Profile, "Profile");
+                self.menu_toggle_button(ui, SidePanelView::Settings, "Settings");
+
+                egui::widgets::global_dark_light_mode_switch(ui);
             });
         });
 
-        egui::SidePanel::left("side_panel").show(ctx, |ui| {
-            ui.heading("Side Panel");
+        if self.side_panel_view != SidePanelView::None {
+            egui::SidePanel::left("side_panel").show(ctx, |ui| {
+                let title = match self.side_panel_view {
+                    SidePanelView::None => "",
+                    SidePanelView::Sources => "Sources",
+                    SidePanelView::Profile => "Profile",
+                    SidePanelView::Settings => "Settings",
+                };
 
-            ui.horizontal(|ui| {
-                ui.label("Write something: ");
-                ui.text_edit_singleline(label);
-            });
+                ui.heading(title);
+                ui.separator();
 
-            ui.add(egui::Slider::new(value, 0.0..=10.0).text("value"));
-            if ui.button("Increment").clicked() {
-                *value += 1.0;
-            }
+                match self.side_panel_view {
+                    SidePanelView::None => {}
+                    SidePanelView::Sources => {
+                        CollapsingHeader::new("Local disks").show(ui, |ui| {
+                            egui::Grid::new("grid_content")
+                                .striped(true)
+                                .show(ui, |ui| {
+                                    for disk in self.system.disks() {
+                                        let used_space_ratio = 1.0
+                                            - disk.available_space() as f32
+                                                / disk.total_space() as f32;
 
-            ui.with_layout(egui::Layout::bottom_up(egui::Align::LEFT), |ui| {
-                ui.horizontal(|ui| {
-                    ui.spacing_mut().item_spacing.x = 0.0;
-                    ui.label("powered by ");
-                    ui.hyperlink_to("egui", "https://github.com/emilk/egui");
-                    ui.label(" and ");
-                    ui.hyperlink_to("eframe", "https://github.com/emilk/egui/tree/master/eframe");
+                                        ui.label(format!(
+                                            "{} ({})",
+                                            disk.name().to_str().unwrap(),
+                                            disk.mount_point().to_str().unwrap()
+                                        ));
+                                        // TODO full width 2nd column & color background as percentage of used space
+                                        ui.label(format!(
+                                            "{}/{} ({:.1}%)",
+                                            Bytes::new(disk.available_space()),
+                                            Bytes::new(disk.total_space()),
+                                            used_space_ratio * 100.0
+                                        ));
+                                        ui.end_row();
+                                    }
+                                });
+                        });
+                    }
+                    SidePanelView::Profile => {}
+                    SidePanelView::Settings => {}
+                }
+
+                ui.with_layout(egui::Layout::bottom_up(egui::Align::LEFT), |ui| {
+                    ui.horizontal(|ui| {
+                        ui.spacing_mut().item_spacing.x = 0.0;
+                        ui.label("powered by ");
+                        ui.hyperlink_to("egui", "https://github.com/emilk/egui");
+                        ui.label(" and ");
+                        ui.hyperlink_to(
+                            "eframe",
+                            "https://github.com/emilk/egui/tree/master/eframe",
+                        );
+                    });
                 });
             });
-        });
+        }
 
-        egui::CentralPanel::default().show(ctx, |ui| {
-            // The central panel the region left after adding TopPanel's and SidePanel's
+        egui::CentralPanel::default().show(ctx, |ui| {});
 
-            ui.heading("eframe template");
-            ui.hyperlink("https://github.com/emilk/eframe_template");
-            ui.add(egui::github_link_file!(
-                "https://github.com/emilk/eframe_template/blob/master/",
-                "Source code."
-            ));
+        egui::TopBottomPanel::bottom("bottom_panel").show(ctx, |ui| {
             egui::warn_if_debug_build(ui);
         });
 
