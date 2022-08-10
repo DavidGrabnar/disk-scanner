@@ -24,6 +24,5 @@ pub fn start(canvas_id: &str) -> Result<(), eframe::wasm_bindgen::JsValue> {
     // Redirect tracing to console.log and friends:
     tracing_wasm::set_as_global_default();
 
-    let app = DiskScanner::default();
-    eframe::start_web(canvas_id, Box::new(app))
+    eframe::start_web(canvas_id, Box::new(|cc| Box::new(DiskScanner::new(cc))))
 }

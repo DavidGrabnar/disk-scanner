@@ -6,7 +6,13 @@
 // When compiling natively:
 #[cfg(not(target_arch = "wasm32"))]
 fn main() {
-    let app = disk_scanner::DiskScanner::default();
+    // Log to stdout (if you run with `RUST_LOG=debug`).
+    tracing_subscriber::fmt::init();
+
     let native_options = eframe::NativeOptions::default();
-    eframe::run_native(Box::new(app), native_options);
+    eframe::run_native(
+        "Disk scanner",
+        native_options,
+        Box::new(|cc| Box::new(disk_scanner::DiskScanner::new(cc))),
+    );
 }
